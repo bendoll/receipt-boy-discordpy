@@ -36,11 +36,14 @@ def print_image_from_url(url):
     response = requests.get(url)
     img = Image.open(BytesIO(response.content))
 
-    # convert input image to monochrome
+    # convert image to monochrome
     img = img.convert("L")
     img = img.point(lambda x: 0 if x < 128 else 255, '1')
 
     printer.image(img)
+
+    # add 8 newlines of feed (roughly 20mm)
+    printer.text("\n" * 8)
     printer.cut()
 
 @client.event

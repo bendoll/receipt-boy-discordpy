@@ -2,6 +2,7 @@
 import os
 import discord
 import requests
+import asyncio
 from dotenv import load_dotenv
 from escpos.printer import Network
 from PIL import Image
@@ -16,6 +17,33 @@ CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
 PRINTER_IP = os.getenv("PRINTER_IP")
 PRINTER_PORT = int(os.getenv("PRINTER_PORT", 9100))
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIME_ZONE"))
+PRINT_DELAY = int(os.getenv("PRINT_QUEUE_INTERVAL"))
+
+# set up print queue worker
+print_queue = asyncio.Queue()
+
+
+async def printer_worker():
+    while True:
+        job = await print_queue.get()
+
+        try:
+            job_type = job["type"]
+
+            if job_type == "text":
+                print_text(job["date"], job["time"], job["author"], job["content"])
+
+            elif job_type == "image":
+                print_image_from_url(job["url"])
+
+        except Exception as e:
+            print(f"Print job failed: {e}")
+
+        finally:
+            print_queue.task_done()
+
+        # Enforce delay between jobs
+        await asyncio.sleep(PRINT_DELAY)
 
 
 # convert UTC timestamp to local time
@@ -85,6 +113,8 @@ def print_image_from_url(url):
 async def on_ready():
     print(f"Logged in as {client.user}")
 
+    asyncio.create_task(printer_worker())
+
 
 @client.event
 async def on_message(message):
@@ -99,12 +129,20 @@ async def on_message(message):
 
     # print message text
     if message.content:
-        print_text(date, time, message.author.name, message.content)
+        await print_queue.put(
+            {
+                "type": "text",
+                "content": message.content,
+                "author": message.author.name,
+                "date": date,
+                "time": time,
+            }
+        )
 
     # print image attachment
     for attachment in message.attachments:
         if attachment.content_type and attachment.content_type.startswith("image"):
-            print_image_from_url(attachment.url)
+            await print_queue.put({"type": "image", "url": attachment.url})
 
 
 client.run(TOKEN)

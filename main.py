@@ -17,14 +17,14 @@ PRINTER_IP = os.getenv("PRINTER_IP")
 PRINTER_PORT = int(os.getenv("PRINTER_PORT", 9100))
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIME_ZONE"))
 
+
 # convert UTC timestamp to local time
-
-
 def format_date(dt):
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     local_date = dt.astimezone(LOCAL_TZ)
     return local_date.strftime("%Y-%m-%d")
+
 
 def format_time(dt):
     if dt.tzinfo is None:
@@ -58,7 +58,7 @@ def print_text(date, time, author, content):
     printer.cut()
 
 
-def print_image_from_url(date, time, author, url):
+def print_image_from_url(url):
     printer = get_printer()
 
     response = requests.get(url)
@@ -71,14 +71,6 @@ def print_image_from_url(date, time, author, url):
     # convert image to monochrome
     img = img.convert("L")
     img = img.point(lambda x: 0 if x < 128 else 255, "1")
-
-    # message header
-    printer.set(align="left", bold=True)
-    printer.text(f"{date}\n")
-    printer.text(f"{time} - ")
-    printer.set(bold=True)
-    printer.text(f"{author}\n")
-    printer.set(bold=False)
 
     # print the image
     printer.image(img)
@@ -112,7 +104,7 @@ async def on_message(message):
     # print image attachment
     for attachment in message.attachments:
         if attachment.content_type and attachment.content_type.startswith("image"):
-            print_image_from_url(date, time, message.author.name, attachment.url)
+            print_image_from_url(attachment.url)
 
 
 client.run(TOKEN)

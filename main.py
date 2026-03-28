@@ -77,7 +77,7 @@ def print_image_from_url(date, time, author, url):
     printer.text(f"{date}\n")
     printer.text(f"{time} - ")
     printer.set(bold=True)
-    printer.text(f"{author}")
+    printer.text(f"{author}\n")
     printer.set(bold=False)
 
     # print the image

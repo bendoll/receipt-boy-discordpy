@@ -36,6 +36,10 @@ def print_image_from_url(url):
     response = requests.get(url)
     img = Image.open(BytesIO(response.content))
 
+    # force resize image to printer width
+    target_width = 576
+    img = img.resize((target_width, int(img.height * target_width / img.width)))
+
     # convert image to monochrome
     img = img.convert("L")
     img = img.point(lambda x: 0 if x < 128 else 255, '1')

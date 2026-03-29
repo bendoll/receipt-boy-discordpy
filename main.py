@@ -9,6 +9,7 @@ from PIL import Image
 from io import BytesIO
 from zoneinfo import ZoneInfo
 from datetime import timezone
+import logging
 
 # load config from .env
 load_dotenv()
@@ -19,31 +20,7 @@ PRINTER_PORT = int(os.getenv("PRINTER_PORT", 9100))
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIME_ZONE"))
 PRINT_DELAY = int(os.getenv("PRINT_QUEUE_INTERVAL"))
 
-# set up print queue worker
-print_queue = asyncio.Queue()
-
-
-async def printer_worker():
-    while True:
-        job = await print_queue.get()
-
-        try:
-            job_type = job["type"]
-
-            if job_type == "text":
-                print_text(job["date"], job["time"], job["author"], job["content"])
-
-            elif job_type == "image":
-                print_image_from_url(job["url"])
-
-        except Exception as e:
-            print(f"Print job failed: {e}")
-
-        finally:
-            print_queue.task_done()
-
-        # Enforce delay between jobs
-        await asyncio.sleep(PRINT_DELAY)
+logging.basicConfig(level=logging.INFO)
 
 
 # convert UTC timestamp to local time
@@ -73,7 +50,10 @@ def get_printer():
 
 
 def print_text(date, time, author, content):
+    logging.info("Print job started...")
+
     printer = get_printer()
+    printer.open()
 
     printer.set(align="left", bold=False)
     printer.text(f"{date}\n")
@@ -84,11 +64,15 @@ def print_text(date, time, author, content):
     printer.text(content + "\n\n")
 
     printer.cut()
+    printer.close()
+
+    logging.info("Print job completed")
 
 
 def print_image_from_url(url):
-    printer = get_printer()
+    logging.info("Print job started...")
 
+    printer = get_printer()
     response = requests.get(url)
     img = Image.open(BytesIO(response.content))
 
@@ -101,18 +85,50 @@ def print_image_from_url(url):
     img = img.point(lambda x: 0 if x < 128 else 255, "1")
 
     # print the image
+    printer.open()
     printer.image(img)
 
     # add 8 newlines of feed (roughly 20mm)
     printer.text("\n" * 8)
 
     printer.cut()
+    printer.close()
+
+    logging.info("Print job completed")
+
+
+# set up print queue worker
+print_queue = asyncio.Queue()
+
+
+async def printer_worker():
+    while True:
+        job = await print_queue.get()
+
+        try:
+            job_type = job["type"]
+
+            if job_type == "text":
+                await asyncio.to_thread(
+                    print_text(job["date"], job["time"], job["author"], job["content"])
+                )
+
+            elif job_type == "image":
+                await asyncio.to_thread(print_image_from_url, job["url"])
+
+        except Exception as e:
+            logging.warning(f"Print job failed: {e}")
+
+        finally:
+            print_queue.task_done()
+
+        # Enforce delay between jobs
+        await asyncio.sleep(PRINT_DELAY)
 
 
 @client.event
 async def on_ready():
-    print(f"Logged in as {client.user}")
-
+    logging.info(f"Logged in as {client.user}")
     asyncio.create_task(printer_worker())
 
 
